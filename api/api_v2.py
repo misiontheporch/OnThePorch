@@ -202,6 +202,41 @@ def ensure_interaction_log_table():
         if conn:
             conn.close()
 
+def ensure_flag_columns():
+    """Add flag columns to interaction_log if they don't exist."""
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Check which columns already exist
+        cursor.execute("""
+            SELECT COLUMN_NAME 
+            FROM information_schema.COLUMNS 
+            WHERE TABLE_SCHEMA = DATABASE() 
+            AND TABLE_NAME = 'interaction_log'
+        """)
+        existing_columns = {row["COLUMN_NAME"] for row in cursor.fetchall()}
+        
+        # Add each flag column if missing
+        if "flagged" not in existing_columns:
+            cursor.execute("ALTER TABLE interaction_log ADD COLUMN flagged BOOLEAN DEFAULT FALSE")
+        if "flag_reason" not in existing_columns:
+            cursor.execute("ALTER TABLE interaction_log ADD COLUMN flag_reason VARCHAR(100)")
+        if "flag_details" not in existing_columns:
+            cursor.execute("ALTER TABLE interaction_log ADD COLUMN flag_details TEXT")
+        if "flagged_at" not in existing_columns:
+            cursor.execute("ALTER TABLE interaction_log ADD COLUMN flagged_at TIMESTAMP NULL")
+        
+        conn.commit()
+        print("✓ Flag columns ready")
+    except Exception as e:
+        print(f"Warning: Could not ensure flag columns: {e}")
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
 
 # =============================================================================
 # Middleware
@@ -825,6 +860,7 @@ if __name__ == "__main__":
     
     # Ensure database tables exist
     ensure_interaction_log_table()
+    ensure_flag_columns()
     
     print(f"\n🚀 Agent API {Config.API_VERSION}")
     print(f"   Host: {Config.HOST}:{Config.PORT}")
